@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import okhttp3.Call;
 import okhttp3.Headers;
 import okhttp3.HttpUrl;
 import okhttp3.MediaType;
@@ -61,9 +62,6 @@ final class ServiceMethod<T> {
   static final Pattern PARAM_URL_REGEX = Pattern.compile("\\{(" + PARAM + ")\\}");
   static final Pattern PARAM_NAME_REGEX = Pattern.compile(PARAM);
 
-  final okhttp3.Call.Factory callFactory;
-  final CallAdapter<?> callAdapter;
-
   private final HttpUrl baseUrl;
   private final Converter<ResponseBody, T> responseConverter;
   private final String httpMethod;
@@ -75,19 +73,17 @@ final class ServiceMethod<T> {
   private final boolean isMultipart;
   private final ParameterHandler<?>[] parameterHandlers;
 
-  ServiceMethod(Builder<T> builder) {
-    this.callFactory = builder.retrofit.callFactory();
-    this.callAdapter = builder.callAdapter;
-    this.baseUrl = builder.retrofit.baseUrl();
-    this.responseConverter = builder.responseConverter;
-    this.httpMethod = builder.httpMethod;
-    this.relativeUrl = builder.relativeUrl;
-    this.headers = builder.headers;
-    this.contentType = builder.contentType;
-    this.hasBody = builder.hasBody;
-    this.isFormEncoded = builder.isFormEncoded;
-    this.isMultipart = builder.isMultipart;
-    this.parameterHandlers = builder.parameterHandlers;
+  ServiceMethod(Factory<T> factory) {
+    this.baseUrl = factory.retrofit.baseUrl();
+    this.responseConverter = factory.responseConverter;
+    this.httpMethod = factory.httpMethod;
+    this.relativeUrl = factory.relativeUrl;
+    this.headers = factory.headers;
+    this.contentType = factory.contentType;
+    this.hasBody = factory.hasBody;
+    this.isFormEncoded = factory.isFormEncoded;
+    this.isMultipart = factory.isMultipart;
+    this.parameterHandlers = factory.parameterHandlers;
   }
 
   /** Builds an HTTP request from method arguments. */
@@ -121,13 +117,19 @@ final class ServiceMethod<T> {
    * requires potentially-expensive reflection so it is best to build each service method only once
    * and reuse it. Builders cannot be reused.
    */
-  static final class Builder<T> {
-    final Retrofit retrofit;
-    final Method method;
-    final Annotation[] methodAnnotations;
-    final Annotation[][] parameterAnnotationsArray;
-    final Type[] parameterTypes;
+  static final class Factory<T> {
+    // Required to create a call.
+    final CallAdapter<?> callAdapter;
+    final Call.Factory callFactory;
 
+    // Required to create a service method.
+    Retrofit retrofit;
+    Method method;
+    Annotation[] methodAnnotations;
+
+    // Fields used in the process of creating the service method.
+    Annotation[][] parameterAnnotationsArray;
+    Type[] parameterTypes;
     Type responseType;
     boolean gotField;
     boolean gotPart;
@@ -145,18 +147,28 @@ final class ServiceMethod<T> {
     Set<String> relativeUrlParamNames;
     ParameterHandler<?>[] parameterHandlers;
     Converter<ResponseBody, T> responseConverter;
-    CallAdapter<?> callAdapter;
 
-    public Builder(Retrofit retrofit, Method method) {
+    // The final result.
+    ServiceMethod<T> serviceMethod;
+
+    public Factory(Retrofit retrofit, Method method) {
       this.retrofit = retrofit;
       this.method = method;
       this.methodAnnotations = method.getAnnotations();
-      this.parameterTypes = method.getGenericParameterTypes();
-      this.parameterAnnotationsArray = method.getParameterAnnotations();
+      this.callAdapter = createCallAdapter();
+      this.callFactory = retrofit.callFactory();
     }
 
-    public ServiceMethod build() {
-      callAdapter = createCallAdapter();
+    public ServiceMethod<T> create() {
+      ServiceMethod<T> result = serviceMethod;
+      return result != null ? result : build();
+    }
+
+    private synchronized ServiceMethod<T> build() {
+      if (serviceMethod != null) return serviceMethod;
+
+      parameterTypes = method.getGenericParameterTypes();
+      parameterAnnotationsArray = method.getParameterAnnotations();
       responseType = callAdapter.responseType();
       if (responseType == Response.class || responseType == okhttp3.Response.class) {
         throw methodError("'"
@@ -214,7 +226,8 @@ final class ServiceMethod<T> {
         throw methodError("Multipart method must contain at least one @Part.");
       }
 
-      return new ServiceMethod<>(this);
+      serviceMethod = new ServiceMethod<>(this);
+      return serviceMethod;
     }
 
     private CallAdapter<?> createCallAdapter() {
@@ -226,9 +239,8 @@ final class ServiceMethod<T> {
       if (returnType == void.class) {
         throw methodError("Service methods cannot return void.");
       }
-      Annotation[] annotations = method.getAnnotations();
       try {
-        return retrofit.callAdapter(returnType, annotations);
+        return retrofit.callAdapter(returnType, methodAnnotations);
       } catch (RuntimeException e) { // Wide exception range because factories are user code.
         throw methodError(e, "Unable to create call adapter for %s", returnType);
       }

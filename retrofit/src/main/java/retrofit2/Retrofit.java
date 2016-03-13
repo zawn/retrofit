@@ -57,7 +57,7 @@ import static retrofit2.Utils.checkNotNull;
  * @author Jake Wharton (jw@squareup.com)
  */
 public final class Retrofit {
-  private final Map<Method, ServiceMethod> serviceMethodCache = new LinkedHashMap<>();
+  private final Map<Method, ServiceMethod.Factory<?>> serviceMethodCache = new LinkedHashMap<>();
 
   private final okhttp3.Call.Factory callFactory;
   private final HttpUrl baseUrl;
@@ -142,9 +142,9 @@ public final class Retrofit {
             if (platform.isDefaultMethod(method)) {
               return platform.invokeDefaultMethod(method, service, proxy, args);
             }
-            ServiceMethod serviceMethod = loadServiceMethod(method);
-            OkHttpCall okHttpCall = new OkHttpCall<>(serviceMethod, args);
-            return serviceMethod.callAdapter.adapt(okHttpCall);
+            ServiceMethod.Factory<?> serviceMethodFactory = loadServiceMethodFactory(method);
+            OkHttpCall okHttpCall = new OkHttpCall<>(serviceMethodFactory, args);
+            return serviceMethodFactory.callAdapter.adapt(okHttpCall);
           }
         });
   }
@@ -153,17 +153,17 @@ public final class Retrofit {
     Platform platform = Platform.get();
     for (Method method : service.getDeclaredMethods()) {
       if (!platform.isDefaultMethod(method)) {
-        loadServiceMethod(method);
+        loadServiceMethodFactory(method).create();
       }
     }
   }
 
-  ServiceMethod loadServiceMethod(Method method) {
-    ServiceMethod result;
+  ServiceMethod.Factory<?> loadServiceMethodFactory(Method method) {
+    ServiceMethod.Factory<?> result;
     synchronized (serviceMethodCache) {
       result = serviceMethodCache.get(method);
       if (result == null) {
-        result = new ServiceMethod.Builder(this, method).build();
+        result = new ServiceMethod.Factory(this, method);
         serviceMethodCache.put(method, result);
       }
     }

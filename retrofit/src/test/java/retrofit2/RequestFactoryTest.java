@@ -62,7 +62,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
 @SuppressWarnings({"UnusedParameters", "unused"}) // Parameters inspected reflectively.
-public final class RequestBuilderTest {
+public final class RequestFactoryTest {
   private static final MediaType TEXT_PLAIN = MediaType.parse("text/plain");
 
   @Test public void customMethodNoBody() {
@@ -2190,9 +2190,10 @@ public final class RequestBuilderTest {
         .build();
 
     Method method = TestingUtils.onlyMethod(cls);
-    ServiceMethod<?> serviceMethod = retrofit.loadServiceMethod(method);
-    OkHttpCall<?> okHttpCall = new OkHttpCall<>(serviceMethod, args);
-    Call<?> call = (Call<?>) serviceMethod.callAdapter.adapt(okHttpCall);
+    ServiceMethod.Factory<?> serviceMethodFactory = retrofit.loadServiceMethodFactory(method);
+    ServiceMethod<?> serviceMethod = serviceMethodFactory.create();
+    OkHttpCall<?> okHttpCall = new OkHttpCall<>(serviceMethodFactory, args);
+    Call<?> call = (Call<?>) serviceMethodFactory.callAdapter.adapt(okHttpCall);
     try {
       call.execute();
       throw new AssertionError();

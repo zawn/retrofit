@@ -77,6 +77,8 @@ public final class RetrofitTest {
     @GET("/") Call<Void> getVoid();
     @POST("/") Call<ResponseBody> postRequestBody(@Body RequestBody body);
     @GET("/") Call<ResponseBody> queryString(@Query("foo") String foo);
+  }
+  interface CallMethodQueryObject {
     @GET("/") Call<ResponseBody> queryObject(@Query("foo") Object foo);
   }
   interface FutureMethod {
@@ -104,14 +106,18 @@ public final class RetrofitTest {
   interface VoidService {
     @GET("/") void nope();
   }
-  interface Annotated {
-    @GET("/") @Foo Call<String> method();
-    @POST("/") Call<ResponseBody> bodyParameter(@Foo @Body String param);
+  interface AnnotatedQueryParameter {
     @GET("/") Call<ResponseBody> queryParameter(@Foo @Query("foo") Object foo);
-
-    @Retention(RUNTIME)
-    @interface Foo {}
   }
+  interface AnnotatedMethod {
+    @GET("/") @Foo Call<String> method();
+  }
+  interface AnnotatedBodyParameter {
+    @POST("/") Call<ResponseBody> bodyParameter(@Foo @Body String param);
+  }
+  @Retention(RUNTIME)
+  @interface Foo {}
+
   interface MutableParameters {
     @GET("/") Call<String> method(@Query("i") AtomicInteger value);
   }
@@ -140,13 +146,14 @@ public final class RetrofitTest {
     }
   }
 
-  @Test public void responseTypeCannotBeRetrofitResponse() {
+  @Test public void responseTypeCannotBeRetrofitResponse() throws Exception {
     Retrofit retrofit = new Retrofit.Builder()
         .baseUrl(server.url("/"))
         .build();
     CallMethod service = retrofit.create(CallMethod.class);
+    Call<Response> call = service.badType1();
     try {
-      service.badType1();
+      call.execute();
       fail();
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessage(
@@ -155,13 +162,14 @@ public final class RetrofitTest {
     }
   }
 
-  @Test public void responseTypeCannotBeOkHttpResponse() {
+  @Test public void responseTypeCannotBeOkHttpResponse() throws Exception {
     Retrofit retrofit = new Retrofit.Builder()
         .baseUrl(server.url("/"))
         .build();
     CallMethod service = retrofit.create(CallMethod.class);
+    Call<okhttp3.Response> call = service.badType2();
     try {
-      service.badType2();
+      call.execute();
       fail();
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessage(
@@ -301,12 +309,12 @@ public final class RetrofitTest {
         .baseUrl(server.url("/"))
         .addConverterFactory(new ToStringConverterFactory())
         .addCallAdapterFactory(new MyCallAdapterFactory())
+        .validateEagerly(true)
         .build();
-    Annotated annotated = retrofit.create(Annotated.class);
-    annotated.method(); // Trigger internal setup.
+    retrofit.create(AnnotatedMethod.class); // Trigger internal setup.
 
     Annotation[] annotations = annotationsRef.get();
-    assertThat(annotations).hasAtLeastOneElementOfType(Annotated.Foo.class);
+    assertThat(annotations).hasAtLeastOneElementOfType(Foo.class);
   }
 
   @Test public void customCallAdapterMissingThrows() {
@@ -341,12 +349,12 @@ public final class RetrofitTest {
     Retrofit retrofit = new Retrofit.Builder()
         .baseUrl(server.url("/"))
         .addConverterFactory(new MyConverterFactory())
+        .validateEagerly(true)
         .build();
-    Annotated annotated = retrofit.create(Annotated.class);
-    annotated.method(); // Trigger internal setup.
+    retrofit.create(AnnotatedMethod.class); // Trigger internal setup.
 
     Annotation[] annotations = annotationsRef.get();
-    assertThat(annotations).hasAtLeastOneElementOfType(Annotated.Foo.class);
+    assertThat(annotations).hasAtLeastOneElementOfType(Foo.class);
   }
 
   @Test public void methodAndParameterAnnotationsPassedToRequestBodyConverter() {
@@ -366,11 +374,11 @@ public final class RetrofitTest {
     Retrofit retrofit = new Retrofit.Builder()
         .baseUrl(server.url("/"))
         .addConverterFactory(new MyConverterFactory())
+        .validateEagerly(true)
         .build();
-    Annotated annotated = retrofit.create(Annotated.class);
-    annotated.bodyParameter(null); // Trigger internal setup.
+    retrofit.create(AnnotatedBodyParameter.class); // Trigger internal setup.
 
-    assertThat(parameterAnnotationsRef.get()).hasAtLeastOneElementOfType(Annotated.Foo.class);
+    assertThat(parameterAnnotationsRef.get()).hasAtLeastOneElementOfType(Foo.class);
     assertThat(methodAnnotationsRef.get()).hasAtLeastOneElementOfType(POST.class);
   }
 
@@ -391,12 +399,12 @@ public final class RetrofitTest {
     Retrofit retrofit = new Retrofit.Builder()
         .baseUrl(server.url("/"))
         .addConverterFactory(new MyConverterFactory())
+        .validateEagerly(true)
         .build();
-    Annotated annotated = retrofit.create(Annotated.class);
-    annotated.queryParameter(null); // Trigger internal setup.
+    retrofit.create(AnnotatedQueryParameter.class); // Trigger internal setup.
 
     Annotation[] annotations = annotationsRef.get();
-    assertThat(annotations).hasAtLeastOneElementOfType(Annotated.Foo.class);
+    assertThat(annotations).hasAtLeastOneElementOfType(Foo.class);
   }
 
   @Test public void stringConverterNotCalledForString() {
@@ -428,8 +436,9 @@ public final class RetrofitTest {
     Retrofit retrofit = new Retrofit.Builder()
         .baseUrl(server.url("/"))
         .addConverterFactory(new MyConverterFactory())
+        .validateEagerly(true)
         .build();
-    CallMethod service = retrofit.create(CallMethod.class);
+    CallMethodQueryObject service = retrofit.create(CallMethodQueryObject.class);
     Call<ResponseBody> call = service.queryObject(null);
     assertThat(call).isNotNull();
     assertThat(factoryCalled.get()).isTrue();
@@ -440,8 +449,9 @@ public final class RetrofitTest {
         .baseUrl(server.url("/"))
         .build();
     CallMethod example = retrofit.create(CallMethod.class);
+    Call<ResponseBody> call = example.disallowed("Hi!");
     try {
-      example.disallowed("Hi!");
+      call.execute();
       fail();
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessage(""
@@ -462,8 +472,9 @@ public final class RetrofitTest {
 
     server.enqueue(new MockResponse().setBody("Hi"));
 
+    Call<String> call = example.disallowed();
     try {
-      example.disallowed();
+      call.execute();
       fail();
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessage(""
@@ -577,44 +588,49 @@ public final class RetrofitTest {
     }
   }
 
-  @Test public void unresolvableParameterTypeThrows() {
+  @Test public void unresolvableParameterTypeThrows() throws Exception {
     Retrofit retrofit = new Retrofit.Builder()
         .baseUrl(server.url("/"))
         .addConverterFactory(new ToStringConverterFactory())
         .build();
     UnresolvableParameterType example = retrofit.create(UnresolvableParameterType.class);
 
+    Call<ResponseBody> typeVariableCall = example.typeVariable(null);
     try {
-      example.typeVariable(null);
+      typeVariableCall.execute();
       fail();
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessage("Parameter type must not include a type variable or wildcard: "
           + "T (parameter #1)\n    for method UnresolvableParameterType.typeVariable");
     }
+    Call<ResponseBody> typeVariableUpperBoundCall = example.typeVariableUpperBound(null);
     try {
-      example.typeVariableUpperBound(null);
+      typeVariableUpperBoundCall.execute();
       fail();
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessage("Parameter type must not include a type variable or wildcard: "
           + "T (parameter #1)\n    for method UnresolvableParameterType.typeVariableUpperBound");
     }
+    Call<ResponseBody> crazyCall = example.crazy(null);
     try {
-      example.crazy(null);
+      crazyCall.execute();
       fail();
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessage("Parameter type must not include a type variable or wildcard: "
           + "java.util.List<java.util.Map<java.lang.String, java.util.Set<T[]>>> (parameter #1)\n"
           + "    for method UnresolvableParameterType.crazy");
     }
+    Call<ResponseBody> wildcardCall = example.wildcard(null);
     try {
-      example.wildcard(null);
+      wildcardCall.execute();
       fail();
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessage("Parameter type must not include a type variable or wildcard: "
           + "java.util.List<?> (parameter #1)\n    for method UnresolvableParameterType.wildcard");
     }
+    Call<ResponseBody> wildcardUpperBoundCall = example.wildcardUpperBound(null);
     try {
-      example.wildcardUpperBound(null);
+      wildcardUpperBoundCall.execute();
       fail();
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessage("Parameter type must not include a type variable or wildcard: "
@@ -1298,5 +1314,31 @@ public final class RetrofitTest {
     assertEquals("b", response2.body());
 
     assertEquals("/?i=201", server.takeRequest().getPath());
+  }
+
+  /**
+   * Some converters may be particularly expensive to create. Make sure they're allocated lazily.
+   * https://github.com/square/retrofit/issues/1670
+   * */
+  @Test public void converterCreationIsLazy() throws IOException {
+    final AtomicBoolean converterCreated = new AtomicBoolean();
+    class MyConverterFactory extends Converter.Factory {
+      @Override public Converter<ResponseBody, ?> responseBodyConverter(
+          Type type, Annotation[] annotations, Retrofit retrofit) {
+        converterCreated.set(true);
+        return new ToStringConverterFactory().responseBodyConverter(type, annotations, retrofit);
+      }
+    }
+    Retrofit retrofit = new Retrofit.Builder()
+        .baseUrl(server.url("/"))
+        .addConverterFactory(new MyConverterFactory())
+        .build();
+    CallMethod callMethod = retrofit.create(CallMethod.class);
+    Call<String> call = callMethod.disallowed();
+    assertThat(converterCreated.get()).isFalse();
+
+    server.enqueue(new MockResponse());
+    call.execute();
+    assertThat(converterCreated.get()).isTrue();
   }
 }
