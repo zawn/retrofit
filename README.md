@@ -12,7 +12,7 @@ Download
 Download [the latest JAR][2] or grab via Maven:
 ```xml
 <dependency>
-  <groupId>com.squareup.retrofit2</groupId>
+  <groupId>com.appunity.retrofit2</groupId>
   <artifactId>retrofit</artifactId>
   <version>2.0.2</version>
 </dependency>
