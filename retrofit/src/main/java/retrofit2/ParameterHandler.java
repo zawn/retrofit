@@ -15,6 +15,10 @@
  */
 package retrofit2;
 
+import okhttp3.Headers;
+import okhttp3.MultipartBody;
+import okhttp3.RequestBody;
+
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Array;
@@ -22,10 +26,6 @@ import java.net.URLEncoder;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
-
-import okhttp3.Headers;
-import okhttp3.MultipartBody;
-import okhttp3.RequestBody;
 
 import static retrofit2.Utils.checkNotNull;
 
@@ -310,7 +310,7 @@ abstract class ParameterHandler<T> {
   static final class ParamQuery<T> extends ParameterHandler<T> {
     public final String key;
     private final String name;
-    private final String value;
+    public final String value;
     private final Converter<T, String> valueConverter;
     private final boolean encoded;
 
@@ -356,7 +356,7 @@ abstract class ParameterHandler<T> {
     private final static String UTF_8 = "utf-8";
     public final String key;
     private final String name;
-    private final String value;
+    public final String value;
     private final Converter<T, String> valueConverter;
 
     ParamHeader(String header, Converter<T, String> valueConverter) {
@@ -365,7 +365,7 @@ abstract class ParameterHandler<T> {
       this.value = checkNotNull(header.substring(index + 1), "query value null");
       Set<String> set = ServiceMethod.parseHeaderParameters(this.value);
       if (set.size() > 1) {
-        throw new IllegalArgumentException("@ParamQuerys Configuration errors,at "
+        throw new IllegalArgumentException("@ParamHeader Configuration errors,at "
             + name
             + ", You can only have"
             + " a maximum of one parameter");
@@ -424,7 +424,7 @@ abstract class ParameterHandler<T> {
     }
 
     String encode(String content, String charset) {
-      if (key == content || "".equals(content)) {
+      if (content == null || "".equals(content.trim())) {
         return null;
       }
       try {
@@ -438,7 +438,7 @@ abstract class ParameterHandler<T> {
 
   public static class ParamUrl<T> extends ParameterHandler<T> {
 
-    private final String url;
+    public final String url;
 
     public final String key;
 

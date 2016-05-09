@@ -182,11 +182,14 @@ public final class Retrofit {
     }
   }
 
-  ParamProvider getParamProvider(Type serivce) {
+  ParamProvider getParamProvider(Class serivce) {
     return paramProvider;
   }
 
-  ParameterHandler[] getTypeCommonHandlers(Type serivce) {
+  ParameterHandler[] getTypeCommonHandlers(Class serivce) {
+    if (!typeCommonHandlersCache.containsKey(serivce)) {
+      loadTypeCommonActions(serivce);
+    }
     return typeCommonHandlersCache.get(serivce);
   }
 
