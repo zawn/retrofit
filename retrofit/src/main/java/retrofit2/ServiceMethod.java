@@ -113,16 +113,16 @@ final class ServiceMethod<T> {
         Object value = null;
         if (parameterHandler instanceof ParameterHandler.ParamUrl) {
           String paramName = ((ParameterHandler.ParamUrl) parameterHandler).key;
-          value = (paramName == null) ? ((ParameterHandler.ParamUrl) parameterHandler).url :
-              paramProvider.getUrlParam(paramName);
+          value = (paramName == null) ? ((ParameterHandler.ParamUrl) parameterHandler).url
+              : paramProvider.getUrlParam(paramName);
         } else if (parameterHandler instanceof ParameterHandler.ParamHeader) {
           String paramName = ((ParameterHandler.ParamHeader) parameterHandler).key;
-          value = (paramName == null) ? ((ParameterHandler.ParamHeader) parameterHandler).value :
-              paramProvider.getHeaderParam(paramName);
+          value = (paramName == null) ? ((ParameterHandler.ParamHeader) parameterHandler).value
+              : paramProvider.getHeaderParam(paramName);
         } else if (parameterHandler instanceof ParameterHandler.ParamQuery) {
           String paramName = ((ParameterHandler.ParamQuery) parameterHandler).key;
-          value = (paramName == null) ? ((ParameterHandler.ParamQuery) parameterHandler).value :
-              paramProvider.getQueryParam(paramName);
+          value = (paramName == null) ? ((ParameterHandler.ParamQuery) parameterHandler).value
+              : paramProvider.getQueryParam(paramName);
         }
         if (value != null)
           parameterHandler.apply(requestBuilder, value);

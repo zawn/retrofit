@@ -353,7 +353,7 @@ abstract class ParameterHandler<T> {
   }
 
   static final class ParamHeader<T> extends ParameterHandler<T> {
-    private final static String UTF_8 = "utf-8";
+    private static final String UTF_8 = "utf-8";
     public final String key;
     private final String name;
     public final String value;
