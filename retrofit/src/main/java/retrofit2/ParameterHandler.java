@@ -16,8 +16,13 @@
 package retrofit2;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Array;
+import java.net.URLEncoder;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
+
 import okhttp3.Headers;
 import okhttp3.MultipartBody;
 import okhttp3.RequestBody;
@@ -299,6 +304,166 @@ abstract class ParameterHandler<T> {
         throw new RuntimeException("Unable to convert " + value + " to RequestBody", e);
       }
       builder.setBody(body);
+    }
+  }
+
+  static final class ParamQuery<T> extends ParameterHandler<T> {
+    public final String key;
+    private final String name;
+    private final String value;
+    private final Converter<T, String> valueConverter;
+    private final boolean encoded;
+
+    ParamQuery(String query, Converter<T, String> valueConverter, boolean encoded) {
+      String[] split = query.split("=");
+      if (split.length != 2) {
+        throw new IllegalArgumentException("@ParamQuerys Configuration errors,at " + query);
+      }
+      this.name = checkNotNull(split[0], "name == null");
+      this.value = checkNotNull(split[1], "query value null");
+      Set<String> set = ServiceMethod.parsePathParameters(this.value);
+      if (set.size() > 1) {
+        throw new IllegalArgumentException("@ParamQuerys Configuration errors,at "
+            + name
+            + ", You can only "
+            + "have a maximum of one parameter");
+      } else if (set.size() == 1) {
+        Iterator<String> iterator = set.iterator();
+        key = iterator.next();
+      } else {
+        key = null;
+      }
+      this.valueConverter = valueConverter;
+      this.encoded = encoded;
+    }
+
+    @Override void apply(RequestBuilder builder, T value) throws IOException {
+      String rValue = null;
+      String resultValue = this.value;
+      if (key != null) {
+        rValue = valueConverter.convert(value);
+        if (rValue != null && !"".equals(rValue)) {
+          resultValue = this.value.replace("{" + key + "}", rValue);
+        }
+      }
+      if (rValue != null && !"".equals(rValue)) {
+        builder.addQueryParam(name, resultValue, encoded);
+      }
+    }
+  }
+
+  static final class ParamHeader<T> extends ParameterHandler<T> {
+    private final static String UTF_8 = "utf-8";
+    public final String key;
+    private final String name;
+    private final String value;
+    private final Converter<T, String> valueConverter;
+
+    ParamHeader(String header, Converter<T, String> valueConverter) {
+      int index = header.indexOf(":");
+      this.name = checkNotNull(header.substring(0, index), "name == null");
+      this.value = checkNotNull(header.substring(index + 1), "query value null");
+      Set<String> set = ServiceMethod.parseHeaderParameters(this.value);
+      if (set.size() > 1) {
+        throw new IllegalArgumentException("@ParamQuerys Configuration errors,at "
+            + name
+            + ", You can only have"
+            + " a maximum of one parameter");
+      } else if (set.size() == 1) {
+        Iterator<String> iterator = set.iterator();
+        key = iterator.next();
+      } else {
+        key = null;
+      }
+      this.valueConverter = valueConverter;
+    }
+
+    @Override
+    void apply(RequestBuilder builder, T value) throws IOException {
+      String rValue = null;
+      String resultValue = this.value;
+      if (key != null) {
+        rValue = extactValid(valueConverter.convert(value));
+        if (rValue != null && !"".equals(rValue)) {
+          resultValue = this.value.replace("{" + key + "}", rValue);
+        }
+      }
+      if (rValue != null && !"".equals(rValue)) {
+        builder.addHeader(name, resultValue);
+      }
+    }
+
+    String extactValid(String value) {
+      if (value == null || "".equals(value)) {
+        return null;
+      }
+
+      String result = null;
+      StringBuffer buffer = new StringBuffer("");
+      if (value.indexOf(";") != -1) { // 组合Value
+        String[] strs = value.split(";");
+        if (null != strs && strs.length > 0) {
+          for (String str : strs) {
+            if (str.indexOf("=") != -1 && str.lastIndexOf("=") != str.length() - 1) {
+              String key = str.substring(0, str.indexOf("="));
+              String val = str.substring(str.indexOf("=") + 1);
+              if (key != null && !"".equals(key) && val != null && !"".equals(val)) {
+                buffer.append(encode(key, UTF_8)).append("=").append(encode(val, UTF_8)
+                ).append(";");
+              }
+            }
+          }
+          if (buffer.length() > 0 && buffer.toString().endsWith(";")) {
+            result = buffer.deleteCharAt(buffer.length() - 1).toString();
+          }
+        }
+        return result;
+      } else { // 单个Value
+        return encode(value, UTF_8);
+      }
+    }
+
+    String encode(String content, String charset) {
+      if (key == content || "".equals(content)) {
+        return null;
+      }
+      try {
+        return URLEncoder.encode(content,
+            charset != null ? charset : UTF_8);
+      } catch (UnsupportedEncodingException ex) {
+        return null;
+      }
+    }
+  }
+
+  public static class ParamUrl<T> extends ParameterHandler<T> {
+
+    private final String url;
+
+    public final String key;
+
+    public ParamUrl(String url) {
+      this.url = url;
+      Set<String> set = ServiceMethod.parsePathParameters(this.url);
+      if (set.size() > 1) {
+        throw new IllegalArgumentException("@ParamQuerys Configuration errors,at "
+            + url
+            + ", You can only have"
+            + " a maximum of one parameter");
+      } else if (set.size() == 1) {
+        Iterator<String> iterator = set.iterator();
+        key = iterator.next();
+      } else {
+        key = null;
+      }
+    }
+
+    @Override void apply(RequestBuilder builder, T value) throws IOException {
+      String resultValue = this.url;
+      if (url != null) {
+        resultValue = this.url.replace("{" + key + "}", value == null ? "" : value.toString());
+      }
+      builder.setServiceUrl(resultValue);
     }
   }
 }

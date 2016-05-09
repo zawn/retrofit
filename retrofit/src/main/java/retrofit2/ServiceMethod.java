@@ -15,17 +15,6 @@
  */
 package retrofit2;
 
-import java.io.IOException;
-import java.lang.annotation.Annotation;
-import java.lang.reflect.Method;
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
-import java.net.URI;
-import java.util.LinkedHashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import okhttp3.Headers;
 import okhttp3.HttpUrl;
 import okhttp3.MediaType;
@@ -55,12 +44,25 @@ import retrofit2.http.Query;
 import retrofit2.http.QueryMap;
 import retrofit2.http.Url;
 
+import java.io.IOException;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.net.URI;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /** Adapts an invocation of an interface method into an HTTP call. */
 final class ServiceMethod<T> {
   // Upper and lower characters, digits, underscores, and hyphens, starting with a character.
   static final String PARAM = "[a-zA-Z][a-zA-Z0-9_-]*";
   static final Pattern PARAM_URL_REGEX = Pattern.compile("\\{(" + PARAM + ")\\}");
   static final Pattern PARAM_NAME_REGEX = Pattern.compile(PARAM);
+  static final Pattern PARAM_HEADER_REGEX = Pattern.compile("\\{([^}]+)\\}");
 
   final okhttp3.Call.Factory callFactory;
   final CallAdapter<?> callAdapter;
@@ -75,6 +77,8 @@ final class ServiceMethod<T> {
   private final boolean isFormEncoded;
   private final boolean isMultipart;
   private final ParameterHandler<?>[] parameterHandlers;
+  private final ParameterHandler<?>[] typeCommonHandlers;
+  private final ParamProvider paramProvider;
 
   ServiceMethod(Builder<T> builder) {
     this.callFactory = builder.retrofit.callFactory();
@@ -89,12 +93,38 @@ final class ServiceMethod<T> {
     this.isFormEncoded = builder.isFormEncoded;
     this.isMultipart = builder.isMultipart;
     this.parameterHandlers = builder.parameterHandlers;
+    this.typeCommonHandlers = builder.typeCommonHandlers;
+    this.paramProvider = builder.paramProvider;
   }
 
   /** Builds an HTTP request from method arguments. */
   Request toRequest(Object... args) throws IOException {
     RequestBuilder requestBuilder = new RequestBuilder(httpMethod, baseUrl, relativeUrl, headers,
         contentType, hasBody, isFormEncoded, isMultipart);
+
+    @SuppressWarnings("unchecked") // It is an error to invoke a method with the wrong arg types.
+    ParameterHandler<Object>[] typeHandlers = (ParameterHandler<Object>[]) typeCommonHandlers;
+    if (typeHandlers != null && typeHandlers.length > 0) {
+      if (paramProvider == null) {
+        throw new IllegalArgumentException("Use type parameters must be set ParamProvider");
+      }
+      for (int i = 0; i < typeHandlers.length; i++) {
+        final ParameterHandler<Object> parameterHandler = typeHandlers[i];
+        Object value = null;
+        if (parameterHandler instanceof ParameterHandler.ParamUrl) {
+          String paramName = ((ParameterHandler.ParamUrl) parameterHandler).key;
+          value = (paramName == null) ? null : paramProvider.getUrlParam(paramName);
+        } else if (parameterHandler instanceof ParameterHandler.ParamHeader) {
+          String paramName = ((ParameterHandler.ParamHeader) parameterHandler).key;
+          value = (paramName == null) ? null : paramProvider.getHeaderParam(paramName);
+        } else if (parameterHandler instanceof ParameterHandler.ParamQuery) {
+          String paramName = ((ParameterHandler.ParamQuery) parameterHandler).key;
+          value = (paramName == null) ? null : paramProvider.getQueryParam(paramName);
+        }
+        if (value != null)
+          parameterHandler.apply(requestBuilder, value);
+      }
+    }
 
     @SuppressWarnings("unchecked") // It is an error to invoke a method with the wrong arg types.
     ParameterHandler<Object>[] handlers = (ParameterHandler<Object>[]) parameterHandlers;
@@ -128,6 +158,8 @@ final class ServiceMethod<T> {
     final Annotation[] methodAnnotations;
     final Annotation[][] parameterAnnotationsArray;
     final Type[] parameterTypes;
+    final ParamProvider paramProvider;
+    final ParameterHandler[] typeCommonHandlers;
 
     Type responseType;
     boolean gotField;
@@ -154,6 +186,9 @@ final class ServiceMethod<T> {
       this.methodAnnotations = method.getAnnotations();
       this.parameterTypes = method.getGenericParameterTypes();
       this.parameterAnnotationsArray = method.getParameterAnnotations();
+
+      this.typeCommonHandlers = retrofit.getTypeCommonHandlers(method.getDeclaringClass());
+      this.paramProvider = retrofit.getParamProvider(method.getDeclaringClass());
     }
 
     public ServiceMethod build() {
@@ -732,6 +767,15 @@ final class ServiceMethod<T> {
    */
   static Set<String> parsePathParameters(String path) {
     Matcher m = PARAM_URL_REGEX.matcher(path);
+    Set<String> patterns = new LinkedHashSet<>();
+    while (m.find()) {
+      patterns.add(m.group(1));
+    }
+    return patterns;
+  }
+
+  static Set<String> parseHeaderParameters(String header) {
+    Matcher m = PARAM_HEADER_REGEX.matcher(header);
     Set<String> patterns = new LinkedHashSet<>();
     while (m.find()) {
       patterns.add(m.group(1));

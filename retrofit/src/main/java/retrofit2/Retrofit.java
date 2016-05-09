@@ -15,6 +15,15 @@
  */
 package retrofit2;
 
+import okhttp3.HttpUrl;
+import okhttp3.OkHttpClient;
+import okhttp3.RequestBody;
+import okhttp3.ResponseBody;
+import retrofit2.http.GET;
+import retrofit2.http.HTTP;
+import retrofit2.http.Header;
+import retrofit2.http.Url;
+
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -25,14 +34,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
-import okhttp3.HttpUrl;
-import okhttp3.OkHttpClient;
-import okhttp3.RequestBody;
-import okhttp3.ResponseBody;
-import retrofit2.http.GET;
-import retrofit2.http.HTTP;
-import retrofit2.http.Header;
-import retrofit2.http.Url;
 
 import static java.util.Collections.unmodifiableList;
 import static retrofit2.Utils.checkNotNull;
@@ -58,6 +59,7 @@ import static retrofit2.Utils.checkNotNull;
  */
 public final class Retrofit {
   private final Map<Method, ServiceMethod> serviceMethodCache = new LinkedHashMap<>();
+  private final Map<Type, ParameterHandler[]> typeCommonHandlersCache = new LinkedHashMap<>();
 
   private final okhttp3.Call.Factory callFactory;
   private final HttpUrl baseUrl;
@@ -65,6 +67,7 @@ public final class Retrofit {
   private final List<CallAdapter.Factory> adapterFactories;
   private final Executor callbackExecutor;
   private final boolean validateEagerly;
+  private ParamProvider paramProvider;
 
   Retrofit(okhttp3.Call.Factory callFactory, HttpUrl baseUrl,
       List<Converter.Factory> converterFactories, List<CallAdapter.Factory> adapterFactories,
@@ -75,6 +78,14 @@ public final class Retrofit {
     this.adapterFactories = unmodifiableList(adapterFactories); // Defensive copy at call site.
     this.callbackExecutor = callbackExecutor;
     this.validateEagerly = validateEagerly;
+  }
+
+  Retrofit(okhttp3.Call.Factory callFactory, HttpUrl baseUrl,
+           List<Converter.Factory> converterFactories, List<CallAdapter.Factory> adapterFactories,
+           Executor callbackExecutor, boolean validateEagerly, ParamProvider paramProvider) {
+    this(callFactory, baseUrl, converterFactories, adapterFactories, callbackExecutor,
+        validateEagerly);
+    this.paramProvider = paramProvider;
   }
 
   /**
@@ -129,6 +140,9 @@ public final class Retrofit {
     if (validateEagerly) {
       eagerlyValidateMethods(service);
     }
+
+    loadTypeCommonActions(service);
+
     return (T) Proxy.newProxyInstance(service.getClassLoader(), new Class<?>[] { service },
         new InvocationHandler() {
           private final Platform platform = Platform.get();
@@ -156,6 +170,24 @@ public final class Retrofit {
         loadServiceMethod(method);
       }
     }
+  }
+
+  void loadTypeCommonActions(Class service) {
+    synchronized (typeCommonHandlersCache) {
+      ParameterHandler[] requestActions = typeCommonHandlersCache.get(service);
+      if (requestActions == null) {
+        requestActions = ServiceParser.parseClassAnnotations(service, this);
+        typeCommonHandlersCache.put(service, requestActions);
+      }
+    }
+  }
+
+  ParamProvider getParamProvider(Type serivce) {
+    return paramProvider;
+  }
+
+  ParameterHandler[] getTypeCommonHandlers(Type serivce) {
+    return typeCommonHandlersCache.get(serivce);
   }
 
   ServiceMethod loadServiceMethod(Method method) {
@@ -390,6 +422,7 @@ public final class Retrofit {
     private List<CallAdapter.Factory> adapterFactories = new ArrayList<>();
     private Executor callbackExecutor;
     private boolean validateEagerly;
+    private ParamProvider paramProvider;
 
     Builder(Platform platform) {
       this.platform = platform;
@@ -515,6 +548,14 @@ public final class Retrofit {
     }
 
     /**
+     * Add Common Param Provider.
+     */
+    public Builder setParamProvider(ParamProvider paramProvider) {
+      this.paramProvider = checkNotNull(paramProvider, "paramProvider == null");
+      return this;
+    }
+
+    /**
      * The executor on which {@link Callback} methods are invoked when returning {@link Call} from
      * your service method.
      * <p>
@@ -564,7 +605,7 @@ public final class Retrofit {
       List<Converter.Factory> converterFactories = new ArrayList<>(this.converterFactories);
 
       return new Retrofit(callFactory, baseUrl, converterFactories, adapterFactories,
-          callbackExecutor, validateEagerly);
+          callbackExecutor, validateEagerly, paramProvider);
     }
   }
 }

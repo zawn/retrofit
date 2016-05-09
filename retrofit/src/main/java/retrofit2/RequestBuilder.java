@@ -15,7 +15,6 @@
  */
 package retrofit2;
 
-import java.io.IOException;
 import okhttp3.FormBody;
 import okhttp3.Headers;
 import okhttp3.HttpUrl;
@@ -26,6 +25,8 @@ import okhttp3.RequestBody;
 import okio.Buffer;
 import okio.BufferedSink;
 
+import java.io.IOException;
+
 final class RequestBuilder {
   private static final char[] HEX_DIGITS =
       { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
@@ -34,6 +35,7 @@ final class RequestBuilder {
   private final String method;
 
   private final HttpUrl baseUrl;
+  private String serviceUrl;
   private String relativeUrl;
   private HttpUrl.Builder urlBuilder;
 
@@ -78,6 +80,14 @@ final class RequestBuilder {
       contentType = MediaType.parse(value);
     } else {
       requestBuilder.addHeader(name, value);
+    }
+  }
+
+  void setHeader(String name, String value) {
+    if ("Content-Type".equalsIgnoreCase(name)) {
+      contentType = MediaType.parse(value);
+    } else {
+      requestBuilder.header(name, value);
     }
   }
 
@@ -139,14 +149,8 @@ final class RequestBuilder {
   }
 
   void addQueryParam(String name, String value, boolean encoded) {
-    if (relativeUrl != null) {
-      // Do a one-time combination of the built relative URL and the base URL.
-      urlBuilder = baseUrl.newBuilder(relativeUrl);
-      if (urlBuilder == null) {
-        throw new IllegalArgumentException(
-            "Malformed URL. Base: " + baseUrl + ", Relative: " + relativeUrl);
-      }
-      relativeUrl = null;
+    if (urlBuilder == null) {
+      buildHttpUrl();
     }
 
     if (encoded) {
@@ -176,19 +180,36 @@ final class RequestBuilder {
     this.body = body;
   }
 
+  private HttpUrl buildHttpUrl() {
+    HttpUrl url;
+    if (urlBuilder == null) {
+      url = baseUrl;
+      if (serviceUrl != null) {
+        url = url.resolve(serviceUrl);
+        serviceUrl = null;
+      }
+      if (relativeUrl != null) {
+        url = url.resolve(relativeUrl);
+        if (url == null) {
+          throw new IllegalArgumentException(
+              "Malformed URL. Base: " + baseUrl + ", Relative: " + relativeUrl);
+        }
+        relativeUrl = null;
+      }
+      this.urlBuilder = url.newBuilder();
+    } else {
+      url = this.urlBuilder.build();
+    }
+    return url;
+  }
+
+  public void setServiceUrl(String serviceUrl) {
+    this.serviceUrl = serviceUrl;
+  }
+
   Request build() {
     HttpUrl url;
-    HttpUrl.Builder urlBuilder = this.urlBuilder;
-    if (urlBuilder != null) {
-      url = urlBuilder.build();
-    } else {
-      // No query parameters triggered builder creation, just combine the relative URL and base URL.
-      url = baseUrl.resolve(relativeUrl);
-      if (url == null) {
-        throw new IllegalArgumentException(
-            "Malformed URL. Base: " + baseUrl + ", Relative: " + relativeUrl);
-      }
-    }
+    url = buildHttpUrl();
 
     RequestBody body = this.body;
     if (body == null) {

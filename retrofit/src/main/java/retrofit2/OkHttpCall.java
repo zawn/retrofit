@@ -15,7 +15,7 @@
  */
 package retrofit2;
 
-import java.io.IOException;
+import okhttp3.CacheControl;
 import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.ResponseBody;
@@ -23,6 +23,8 @@ import okio.Buffer;
 import okio.BufferedSource;
 import okio.ForwardingSource;
 import okio.Okio;
+
+import java.io.IOException;
 
 final class OkHttpCall<T> implements Call<T> {
   private final ServiceMethod<T> serviceMethod;
@@ -58,7 +60,7 @@ final class OkHttpCall<T> implements Call<T> {
       }
     }
     try {
-      return (rawCall = createRawCall()).request();
+      return (rawCall = createRawCall(null)).request();
     } catch (RuntimeException e) {
       creationFailure = e;
       throw e;
@@ -69,6 +71,10 @@ final class OkHttpCall<T> implements Call<T> {
   }
 
   @Override public void enqueue(final Callback<T> callback) {
+    enqueue(callback, null);
+  }
+
+  @Override public void enqueue(final Callback<T> callback, CacheControl cacheControl) {
     if (callback == null) throw new NullPointerException("callback == null");
 
     okhttp3.Call call;
@@ -82,7 +88,7 @@ final class OkHttpCall<T> implements Call<T> {
       failure = creationFailure;
       if (call == null && failure == null) {
         try {
-          call = rawCall = createRawCall();
+          call = rawCall = createRawCall(cacheControl);
         } catch (Throwable t) {
           failure = creationFailure = t;
         }
@@ -142,6 +148,10 @@ final class OkHttpCall<T> implements Call<T> {
   }
 
   @Override public Response<T> execute() throws IOException {
+    return execute(null);
+  }
+
+  @Override public Response<T> execute(CacheControl cacheControl) throws IOException {
     okhttp3.Call call;
 
     synchronized (this) {
@@ -159,7 +169,7 @@ final class OkHttpCall<T> implements Call<T> {
       call = rawCall;
       if (call == null) {
         try {
-          call = rawCall = createRawCall();
+          call = rawCall = createRawCall(cacheControl);
         } catch (IOException | RuntimeException e) {
           creationFailure = e;
           throw e;
@@ -174,8 +184,11 @@ final class OkHttpCall<T> implements Call<T> {
     return parseResponse(call.execute());
   }
 
-  private okhttp3.Call createRawCall() throws IOException {
+  private okhttp3.Call createRawCall(final CacheControl cacheControl) throws IOException {
     Request request = serviceMethod.toRequest(args);
+    if (cacheControl != null) {
+      request = request.newBuilder().cacheControl(cacheControl).build();
+    }
     okhttp3.Call call = serviceMethod.callFactory.newCall(request);
     if (call == null) {
       throw new NullPointerException("Call.Factory returned null.");

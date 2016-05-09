@@ -493,4 +493,13 @@ final class Utils {
       return "? extends " + typeToString(upperBound);
     }
   }
+
+  static RuntimeException typeError(Type type, String message, Object... args) {
+    message = String.format(message, args);
+    IllegalArgumentException e = new IllegalArgumentException(message
+        + "\n    for Type " + type.toString());
+    e.initCause(null);
+    return e;
+  }
+
 }

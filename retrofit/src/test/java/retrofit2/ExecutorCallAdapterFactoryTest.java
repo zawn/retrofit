@@ -21,6 +21,8 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.util.List;
 import java.util.concurrent.Executor;
+
+import okhttp3.CacheControl;
 import okhttp3.Request;
 import org.junit.Test;
 
@@ -74,7 +76,7 @@ public final class ExecutorCallAdapterFactoryTest {
         (CallAdapter<Call<?>>) factory.get(returnType, NO_ANNOTATIONS, retrofit);
     final Response<String> response = Response.success("Hi");
     Call<String> call = (Call<String>) adapter.adapt(new EmptyCall() {
-      @Override public Response<String> execute() throws IOException {
+      @Override public Response<String> execute(CacheControl cacheControl) throws IOException {
         return response;
       }
     });
@@ -87,7 +89,7 @@ public final class ExecutorCallAdapterFactoryTest {
         (CallAdapter<Call<?>>) factory.get(returnType, NO_ANNOTATIONS, retrofit);
     final Response<String> response = Response.success("Hi");
     EmptyCall originalCall = new EmptyCall() {
-      @Override public void enqueue(Callback<String> callback) {
+      @Override public void enqueue(Callback<String> callback,CacheControl cacheControl) {
         callback.onResponse(this, response);
       }
     };
@@ -103,7 +105,7 @@ public final class ExecutorCallAdapterFactoryTest {
         (CallAdapter<Call<?>>) factory.get(returnType, NO_ANNOTATIONS, retrofit);
     final Throwable throwable = new IOException();
     EmptyCall originalCall = new EmptyCall() {
-      @Override public void enqueue(Callback<String> callback) {
+      @Override public void enqueue(Callback<String> callback,CacheControl cacheControl) {
         callback.onFailure(this, throwable);
       }
     };
@@ -143,11 +145,19 @@ public final class ExecutorCallAdapterFactoryTest {
       throw new UnsupportedOperationException();
     }
 
+    @Override public void enqueue(Callback<String> callback, CacheControl cacheControl) {
+      throw new UnsupportedOperationException();
+    }
+
     @Override public boolean isExecuted() {
       return false;
     }
 
     @Override public Response<String> execute() throws IOException {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override public Response<String> execute(CacheControl cacheControl) throws IOException {
       throw new UnsupportedOperationException();
     }
 

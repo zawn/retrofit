@@ -15,11 +15,13 @@
  */
 package retrofit2;
 
+import okhttp3.CacheControl;
+import okhttp3.Request;
+
 import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.util.concurrent.Executor;
-import okhttp3.Request;
 
 final class ExecutorCallAdapterFactory extends CallAdapter.Factory {
   final Executor callbackExecutor;
@@ -55,8 +57,13 @@ final class ExecutorCallAdapterFactory extends CallAdapter.Factory {
     }
 
     @Override public void enqueue(final Callback<T> callback) {
-      if (callback == null) throw new NullPointerException("callback == null");
-
+      enqueue(callback, null);
+    }
+	
+    @Override public void enqueue(final Callback<T> callback, CacheControl cacheControl) {
+	
+	   if (callback == null) throw new NullPointerException("callback == null");
+	   
       delegate.enqueue(new Callback<T>() {
         @Override public void onResponse(Call<T> call, final Response<T> response) {
           callbackExecutor.execute(new Runnable() {
@@ -78,7 +85,7 @@ final class ExecutorCallAdapterFactory extends CallAdapter.Factory {
             }
           });
         }
-      });
+      }, cacheControl);
     }
 
     @Override public boolean isExecuted() {
@@ -86,7 +93,12 @@ final class ExecutorCallAdapterFactory extends CallAdapter.Factory {
     }
 
     @Override public Response<T> execute() throws IOException {
-      return delegate.execute();
+      return delegate.execute(null);
+    }
+
+    @Override
+    public Response<T> execute(CacheControl cacheControl) throws IOException {
+      return delegate.execute(cacheControl);
     }
 
     @Override public void cancel() {

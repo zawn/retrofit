@@ -15,11 +15,13 @@
  */
 package retrofit2.mock;
 
-import java.io.IOException;
+import okhttp3.CacheControl;
 import okhttp3.Request;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
+
+import java.io.IOException;
 
 /** Factory methods for creating {@link Call} instances which immediately respond or fail. */
 public final class Calls {
@@ -33,7 +35,17 @@ public final class Calls {
         return response;
       }
 
+      @Override
+      public Response<T> execute(CacheControl cacheControl) throws IOException {
+        return response;
+      }
+
       @Override public void enqueue(Callback<T> callback) {
+       callback.onResponse(this, response);
+      }
+
+      @Override
+      public void enqueue(Callback<T> callback, CacheControl cacheControl) {
         callback.onResponse(this, response);
       }
 
@@ -65,7 +77,17 @@ public final class Calls {
         throw failure;
       }
 
+      @Override
+      public Response<T> execute(CacheControl cacheControl) throws IOException {
+        throw failure;
+      }
+
       @Override public void enqueue(Callback<T> callback) {
+        callback.onFailure(this, failure);
+      }
+
+      @Override
+      public void enqueue(Callback<T> callback, CacheControl cacheControl) {
         callback.onFailure(this, failure);
       }
 
