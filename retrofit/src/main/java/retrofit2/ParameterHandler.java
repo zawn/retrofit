@@ -338,7 +338,7 @@ abstract class ParameterHandler<T> {
     }
 
     @Override void apply(RequestBuilder builder, T value) throws IOException {
-      String rValue = null;
+      String rValue;
       String resultValue = this.value;
       if (key != null) {
         rValue = valueConverter.convert(value);
@@ -346,7 +346,7 @@ abstract class ParameterHandler<T> {
           resultValue = this.value.replace("{" + key + "}", rValue);
         }
       }
-      if (rValue != null && !"".equals(rValue)) {
+      if (resultValue != null && !"".equals(resultValue)) {
         builder.addQueryParam(name, resultValue, encoded);
       }
     }
@@ -380,7 +380,7 @@ abstract class ParameterHandler<T> {
 
     @Override
     void apply(RequestBuilder builder, T value) throws IOException {
-      String rValue = null;
+      String rValue;
       String resultValue = this.value;
       if (key != null) {
         rValue = extactValid(valueConverter.convert(value));
@@ -388,7 +388,7 @@ abstract class ParameterHandler<T> {
           resultValue = this.value.replace("{" + key + "}", rValue);
         }
       }
-      if (rValue != null && !"".equals(rValue)) {
+      if (resultValue != null && !"".equals(resultValue)) {
         builder.addHeader(name, resultValue);
       }
     }

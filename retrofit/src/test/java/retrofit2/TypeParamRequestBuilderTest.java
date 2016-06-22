@@ -143,8 +143,8 @@ public final class TypeParamRequestBuilderTest {
 
   @Test public void url2Param() throws Exception {
 
-//    @ParamQuerys({"userid={userid}", "city={city}", "v={verison}", "version={version}"})
     @ParamUrl("{base}")
+    @ParamQuerys({"userid={userid}", "city={city}", "v={verison}", "version={version}"})
     class Example {
       @GET("/foo") //
       Call<ResponseBody> method(@Query("bar") String thing) {
@@ -153,7 +153,7 @@ public final class TypeParamRequestBuilderTest {
     }
     try {
       final Request request = buildRequest(Example.class, paramProvider, "zhang");
-      assertThat(request.url().toString()).isEqualTo("http://www.baidu.com/foo?bar=zhang");
+      assertThat(request.url().toString()).isEqualTo("http://www.baidu.com/foo?userid=userid&city=city&v=verison&version=version&bar=zhang");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessage(
           "@ParamHeader Configuration errors,at X-House365, You can only have a maximum of one " +
